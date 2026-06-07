@@ -19,7 +19,7 @@
             <div class="card-body">
                 <div class="row align-items-end flex-wrap">
                     <x-datatable.common.filter-select-drop-down id="filter_status" name="filter_status"
-                        :options="['success' => 'Success', 'pending' => 'Pending', 'pending_webhook' => 'Pending Webhook', 'failed' => 'Failed']" isCustom="true"
+                        :options="['success' => 'Success', 'initiated' => 'Initiated', 'pending' => 'Pending', 'pending_webhook' => 'Pending Webhook', 'failed' => 'Failed']" isCustom="true"
                         isCustomCol="3" haslabel="Payment Status" />
 
                     <div class="col-6 col-md-3 col-lg-2 mt-2">

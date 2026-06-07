@@ -29,9 +29,8 @@ class PaymentService
     /**
      * Create payment order.
      *
-     * No DB transaction record is created here. We only create a gateway order
-     * and cache the metadata. The actual PaymentTransaction row is created later
-     * when the webhook confirms payment (like weblo's PayPal pattern).
+     * Creates a pending PaymentTransaction row immediately so webhook/verify
+     * can always find the order even if file cache is cleared or missed.
      */
     public function create_order_service($request)
     {
@@ -83,7 +82,31 @@ class PaymentService
                 'transaction_id' => $transactionId,
             ]);
 
-            // Store order metadata in cache (24 hours) so webhook/verify can create the DB row later
+            $transaction = PaymentTransaction::firstOrCreate(
+                ['gateway_order_id' => $gatewayResponse['order_id']],
+                [
+                    'transaction_id'       => $transactionId,
+                    'android_id'           => $androidId,
+                    'plan_id'              => $planId,
+                    'payment_gateway_id'   => $gateway->id,
+                    'amount'               => $plan->amount,
+                    'currency'             => 'INR',
+                    'gateway_response'     => $gatewayResponse['gateway_response'] ?? [],
+                    'status'               => PaymentStatus::INITIATED,
+                    'metadata'             => [
+                        'user_agent' => $request->userAgent(),
+                        'ip_address' => $request->ip(),
+                    ],
+                ]
+            );
+
+            Log::info('[CreateOrder] Pending transaction saved', [
+                'db_id' => $transaction->id,
+                'gateway_order_id' => $gatewayResponse['order_id'],
+                'was_recently_created' => $transaction->wasRecentlyCreated,
+            ]);
+
+            // Keep cache as fallback for legacy flow and extra metadata
             $cacheKey = 'payment_order:' . $gatewayResponse['order_id'];
             $cacheData = [
                 'transaction_id' => $transactionId,
@@ -293,11 +316,22 @@ class PaymentService
     }
 
     /**
-     * Create PaymentTransaction row from cached order data.
-     * Used by verify and webhook when the DB row doesn't exist yet.
+     * Resolve PaymentTransaction by gateway order id.
+     * Checks DB first, then falls back to cache for legacy orders.
      */
     public function createTransactionFromCache(string $gatewayOrderId): ?PaymentTransaction
     {
+        $existing = PaymentTransaction::where('gateway_order_id', $gatewayOrderId)->first();
+
+        if ($existing) {
+            Log::info('[CreateFromCache] Found existing DB transaction', [
+                'transaction_id' => $existing->id,
+                'order_id' => $gatewayOrderId,
+                'status' => $existing->status,
+            ]);
+            return $existing;
+        }
+
         $cacheKey = 'payment_order:' . $gatewayOrderId;
         $cached = Cache::get($cacheKey);
 
@@ -325,7 +359,7 @@ class PaymentService
                 'amount' => $cached['amount'],
                 'currency' => $cached['currency'],
                 'gateway_response' => $cached['gateway_response'] ?? [],
-                'status' => PaymentStatus::PENDING_WEBHOOK,
+                'status' => PaymentStatus::INITIATED,
                 'metadata' => [
                     'user_agent' => $cached['user_agent'] ?? null,
                     'ip_address' => $cached['ip_address'] ?? null,
@@ -335,7 +369,7 @@ class PaymentService
 
         Cache::forget($cacheKey);
 
-        Log::info('[CreateFromCache] Transaction created or found', [
+        Log::info('[CreateFromCache] Transaction created from cache', [
             'transaction_id' => $transaction->id,
             'order_id' => $gatewayOrderId,
             'was_recently_created' => $transaction->wasRecentlyCreated,
