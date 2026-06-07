@@ -43,9 +43,9 @@ class RazorpayService implements PaymentGatewayInterface
         try {
             // Attach helpful metadata to Razorpay order. We also include a static
             // app identifier so the same Razorpay account can distinguish
-            // between different apps (e.g. FlixyGO vs others).
+            // between different apps (e.g. netprime vs flixygo).
             $notes = $metadata;
-            $notes['app_info'] = 'flixygo';
+            $notes['app_info'] = 'netprime';
 
             $orderData = [
                 'receipt' => $metadata['transaction_id'] ?? uniqid('txn_'),
