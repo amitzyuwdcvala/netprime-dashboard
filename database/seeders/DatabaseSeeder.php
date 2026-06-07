@@ -16,6 +16,7 @@ class DatabaseSeeder extends Seeder
             PlanSeeder::class,
             PaymentGatewaySeeder::class,
             // AddUsersSeeder::class,
+            // ImportLegacyUsersSeeder::class,  // run once after client fills data
         ]);
     }
 }
