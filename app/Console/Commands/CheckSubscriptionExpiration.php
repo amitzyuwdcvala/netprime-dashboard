@@ -24,12 +24,10 @@ class CheckSubscriptionExpiration extends Command
      *
      * @var string
      */
-    protected $description = 'Check and expire subscriptions past their end time (run hourly for exact-time expiry). Does NOT reset video_click_count.';
+    protected $description = 'Check and expire subscriptions past their end time (runs every 6 hours). Does NOT reset video_click_count.';
 
     public function handle()
     {
-        Log::info('[Cron] Subscription expiration check started');
-
         $this->info('Checking for expired subscriptions...');
 
         $expiredCount = 0;
@@ -71,23 +69,16 @@ class CheckSubscriptionExpiration extends Command
             $this->info("Successfully expired {$expiredCount} subscriptions.");
             $this->info("Updated VIP status for {$updatedUsers} users.");
 
-            Log::info('[Cron] Subscription expiration check completed', [
-                'expired_count' => $expiredCount,
-                'updated_users' => $updatedUsers,
-            ]);
-
             return Command::SUCCESS;
 
         } catch (\Exception $e) {
             $this->error('Error checking subscription expiration: ' . $e->getMessage());
-            
+
             Log::error('[Cron] Subscription expiration check failed', [
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
             ]);
 
             return Command::FAILURE;
         }
     }
 }
-

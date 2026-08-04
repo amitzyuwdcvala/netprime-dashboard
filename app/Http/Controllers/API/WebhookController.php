@@ -48,12 +48,6 @@ class WebhookController extends Controller
     {
         $requestId = uniqid('wh_', true);
         try {
-            Log::info('[Webhook] Incoming', [
-                'request_id' => $requestId,
-                'gateway' => $gatewayName,
-                'event' => $request->input('event') ?? $request->input('type') ?? 'unknown',
-            ]);
-
             $signature = $request->header('X-Razorpay-Signature')
                 ?? $request->header('X-PayU-Signature')
                 ?? $request->header('X-PhonePe-Signature')
@@ -85,13 +79,6 @@ class WebhookController extends Controller
             }
 
             $paymentInfo = $gatewayService->handleWebhook($webhookData);
-
-            Log::info('[Webhook] Payment info extracted', [
-                'request_id' => $requestId,
-                'order_id' => $paymentInfo['order_id'] ?? null,
-                'payment_id' => $paymentInfo['payment_id'] ?? null,
-                'status' => $paymentInfo['status'] ?? null,
-            ]);
 
             $orderId = $paymentInfo['order_id'] ?? null;
             $paymentId = $paymentInfo['payment_id'] ?? null;
@@ -155,11 +142,6 @@ class WebhookController extends Controller
                 $paymentInfo['status'] ?? 'unknown',
                 $paymentInfo['error_message'] ?? null,
             );
-
-            Log::info('[Webhook] Job dispatched', [
-                'request_id' => $requestId,
-                'transaction_id' => $transaction->id,
-            ]);
 
             return response()->json(['status' => 'received'], 200);
 

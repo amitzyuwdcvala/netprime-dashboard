@@ -38,13 +38,6 @@ class ProcessPaymentWebhook implements ShouldQueue, ShouldBeUnique
 
     public function handle(PaymentService $paymentService): void
     {
-        Log::info('[ProcessPaymentWebhook] Job started', [
-            'gateway' => $this->gatewayName,
-            'order_id' => $this->orderId,
-            'payment_id' => $this->paymentId,
-            'status' => $this->status,
-        ]);
-
         $transaction = PaymentTransaction::where('gateway_order_id', $this->orderId)
             ->orWhere('gateway_payment_id', $this->paymentId)
             ->first();
@@ -60,21 +53,6 @@ class ProcessPaymentWebhook implements ShouldQueue, ShouldBeUnique
 
         if ($this->status === 'captured' || $this->status === 'success') {
             $ok = $paymentService->processSuccessfulPayment($transaction);
-            Log::info('[ProcessPaymentWebhook] Job completed (success path)', [
-                'transaction_id' => $transaction->id,
-                'android_id' => $transaction->android_id,
-                'processed' => $ok,
-            ]);
-        } elseif ($this->status === 'failed') {
-            $transaction->status = PaymentStatus::FAILED;
-            $transaction->failed_at = now();
-            $transaction->error_message = $this->errorMessage ?? 'Payment failed';
-            $transaction->save();
-            Log::info('[ProcessPaymentWebhook] Job completed (marked failed)', [
-                'transaction_id' => $transaction->id,
-                'gateway_order_id' => $this->orderId,
-                'error_message' => $transaction->error_message,
-            ]);
         }
 
         // Invalidate dashboard cache so stats reflect new payment/subscription state
