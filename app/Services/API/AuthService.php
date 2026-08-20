@@ -2,6 +2,7 @@
 
 namespace App\Services\API;
 
+use App\Constants\SubscriptionStatus;
 use App\Http\Traits\ApiResponses;
 use App\Models\AppConfig;
 use App\Models\User;
@@ -15,7 +16,8 @@ class AuthService
     use ApiResponses;
 
     /**
-     * Register user (first time app launch)
+     * Register user (first time app launch).
+     * Also checks and expires VIP subscription on-the-fly so cron is not needed.
      */
     public function register_service($request)
     {
@@ -27,6 +29,8 @@ class AuthService
             $user = User::find($androidId);
 
             if ($user) {
+                $this->expireIfNeeded($user);
+
                 DB::commit();
 
                 return $this->successResponse([
@@ -61,6 +65,51 @@ class AuthService
 
             return $this->errorResponse([], 'Registration failed. Please try again.', 500);
         }
+    }
+
+    /**
+     * Check if user's VIP subscription has expired and mark it expired immediately.
+     * Called on every register (app open) so cron is not needed.
+     */
+    private function expireIfNeeded(User $user): void
+    {
+        // Only VIP users need checking
+        if (!$user->is_vip) {
+            return;
+        }
+
+        $subscription = $user->subscriptions; // hasOne — latest subscription row
+
+        if (!$subscription) {
+            // VIP flag set but no subscription row — clean up
+            $user->is_vip = false;
+            $user->save();
+            \App\Services\API\VideoAccessService::invalidateVipAccessCache($user->android_id);
+            return;
+        }
+
+        // Check if subscription end date has passed
+        $expired = false;
+
+        if ($subscription->end_at && $subscription->end_at < now()) {
+            $expired = true;
+        } elseif (!$subscription->end_at && $subscription->end_date && $subscription->end_date < now()->toDateString()) {
+            $expired = true;
+        }
+
+        if (!$expired) {
+            return;
+        }
+
+        if ($subscription->status !== SubscriptionStatus::EXPIRED) {
+            $subscription->status = SubscriptionStatus::EXPIRED;
+            $subscription->save();
+        }
+
+        $user->is_vip = false;
+        $user->save();
+
+        \App\Services\API\VideoAccessService::invalidateVipAccessCache($user->android_id);
     }
 
     /**
